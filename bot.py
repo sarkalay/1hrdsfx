@@ -1,4 +1,3 @@
-# deepseek_h1_5m_server.py
 from flask import Flask, request, jsonify
 import requests
 import json
@@ -9,47 +8,50 @@ import time
 app = Flask(__name__)
 
 # === CONFIG ===
-DEEPSEEK_API_KEY = "sk-your-deepseek-key-here"  # ← ဒီနေရာမှာ ထည့်ပါ
+DEEPSEEK_API_KEY = "sk-your-key-here"  # ← ဒီနေရာမှာ ထည့်ပါ
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-chat"
 
-# === PROMPTS ===
+# === ANYTIME ENTRY PROMPT ===
 PROMPT_ENTRY = """
-1H CANDLE JUST CLOSED. DECIDE ENTRY ONLY.
+ANYTIME ENTRY ALLOWED - Analyze Multi-Timeframe
 
 Current Price: ${price}
+Balance: ${balance}
+Open Positions: {positions}
+
+=== H1 Indicators ===
 RSI(14): {rsi} → {rsi_level}
 EMA9: {ema9}, EMA21: {ema21} → Trend: {trend}
 ATR: {atr}
-Balance: ${balance}
 
-DECIDE: LONG, SHORT, or HOLD
-If trade: size $20-60, SL 8-20 points, TP 25-60 points
+You can enter LONG or SHORT at ANY TIME if signal is strong.
+Only HOLD if no clear signal.
 
 Return JSON ONLY:
 {
   "decision": "LONG"|"SHORT"|"HOLD",
-  "size_usd": number,
-  "stop_loss": number,
-  "take_profit": number,
-  "reasoning": "short text"
+  "size_usd": 20|30|40|50|60,
+  "stop_loss": 8|10|12|15|18|20,
+  "take_profit": 25|30|40|50|60,
+  "reasoning": "short reason"
 }
 """
 
 PROMPT_MANAGE = """
-POSITION OPEN. Current Profit: ${profit} USD
+POSITION OPEN. Profit: ${profit} USD
 
 Price: ${price}
 RSI: {rsi}, EMA9: {ema9}, EMA21: {ema21}
 
 DECIDE:
 - CLOSE (if profit > 2% or loss > 1.5%)
-- TRAIL (points to trail)
+- TRAIL (points)
 - REVERSE_LONG / REVERSE_SHORT
-- MOVE_SL (new SL price)
+- MOVE_SL (new points)
 - HOLD
 
-Return JSON ONLY:
+Return JSON:
 {
   "decision": "CLOSE"|"TRAIL"|"REVERSE_LONG"|"REVERSE_SHORT"|"MOVE_SL"|"HOLD",
   "trail_points": number,
@@ -74,7 +76,7 @@ def call_deepseek(prompt):
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]
         else:
-            print(f"DeepSeek Error: {resp.status_code} - {resp.text}")
+            print(f"DeepSeek Error: {resp.status_code}")
             return None
     except Exception as e:
         print(f"Error: {e}")
@@ -95,16 +97,15 @@ def ai_decision():
     data = request.get_json()
     mode = data.get("mode", "ENTRY_CHECK")
     
-    # Add derived fields
-    rsi = float(data.get("indicators", {}).get("rsi", 50))
+    indicators = data.get("indicators", {})
+    rsi = float(indicators.get("rsi", 50))
     data["rsi_level"] = "oversold" if rsi < 30 else "overbought" if rsi > 70 else "neutral"
-    data["trend"] = "up" if data["indicators"]["ema9"] > data["indicators"]["ema21"] else "down"
+    data["trend"] = "up" if indicators.get("ema9", 0) > indicators.get("ema21", 0) else "down"
     
     if mode == "ENTRY_CHECK":
         prompt = PROMPT_ENTRY.format(**data)
     else:
-        profit = data.get("position_profit", 0)
-        data["profit"] = round(profit, 2)
+        data["profit"] = round(data.get("position_profit", 0), 2)
         prompt = PROMPT_MANAGE.format(**data)
     
     raw = call_deepseek(prompt)
@@ -112,7 +113,6 @@ def ai_decision():
     result["reasoning"] = result.get("reasoning", "AI decision")
     return jsonify(result)
 
-# Keep server alive
 def keep_alive():
     while True:
         time.sleep(3600)
@@ -120,5 +120,7 @@ def keep_alive():
 
 if __name__ == '__main__':
     threading.Thread(target=keep_alive, daemon=True).start()
-    print("DeepSeek H1+5M AI Server Running on http://127.0.0.1:5000")
+    print("X…
+
+AU AI Anytime Server → http://127.0.0.1:5000")
     app.run(host='127.0.0.1', port=5000, debug=False)
